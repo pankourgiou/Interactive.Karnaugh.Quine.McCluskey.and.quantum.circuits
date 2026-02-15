@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Interactive Karnaugh, Quine–McCluskey & Quantum Circuits</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7dd3fc;--muted:#94a3b8;--glass: rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Arial;background:linear-gradient(180deg,#071024 0%, #09162a 100%);color:#e6eef8}
+    .container{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center}
+    h1{font-size:20px;margin:0}
+    .tabs{display:flex;gap:8px;margin-top:18px}
+    .tab{padding:8px 12px;border-radius:8px;background:var(--glass);cursor:pointer;color:var(--muted)}
+    .tab.active{background:linear-gradient(90deg,rgba(125,211,252,0.12),rgba(125,211,252,0.06));color:var(--accent);box-shadow:0 6px 20px rgba(7,18,28,0.6)}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:16px;border-radius:12px;margin-top:14px;box-shadow:0 6px 24px rgba(2,6,23,0.7)}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:14px}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input[type=text],select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    button{background:var(--accent);border:0;padding:8px 12px;border-radius:8px;color:#022028;cursor:pointer}
+    .kmap{display:grid;gap:6px}
+    .kcell{width:56px;height:56px;border-radius:6px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,0.03)}
+    .kcell.on{background:linear-gradient(180deg,rgba(125,211,252,0.14),rgba(125,211,252,0.06));color:#002427;font-weight:700}
+    .small{font-size:12px;color:var(--muted)}
+    table.circuit{width:100%;border-collapse:collapse}
+    table.circuit td,table.circuit th{border:1px solid rgba(255,255,255,0.03);padding:8px;text-align:center}
+    .gate{display:inline-block;padding:6px 8px;border-radius:6px;background:var(--glass);min-width:34px}
+    .controls{display:flex;gap:8px;align-items:center}
+    .muted{color:var(--muted)}
+    pre{white-space:pre-wrap;background:rgba(255,255,255,0.02);padding:10px;border-radius:8px}
+    @media(max-width:980px){.grid{grid-template-columns:1fr;}.kcell{width:46px;height:46px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Interactive Karnaugh Map • Quine–McCluskey • Quantum Circuit Simulator</h1>
+        <div class="small muted">All tools run locally inside this single HTML file — save it and open in your browser.</div>
+      </div>
+    </header>
+
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="kmap">Karnaugh Map</div>
+      <div class="tab" data-tab="qm">Quine–McCluskey</div>
+      <div class="tab" data-tab="qc">Quantum Circuits</div>
+    </div>
+
+    <div id="kmap" class="card" style="display:block">
+      <div class="grid">
+        <div>
+          <label>Number of variables</label>
+          <select id="k_vars">
+            <option value="2">2 variables</option>
+            <option value="3">3 variables</option>
+            <option value="4" selected>4 variables</option>
+          </select>
+
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+            <label style="margin:0">Minterms (comma separated)</label>
+          </div>
+          <input id="k_minterms" type="text" placeholder="e.g. 0,1,3,7" />
+          <label class="small muted">Don't cares (optional)</label>
+          <input id="k_dont" type="text" placeholder="e.g. 2,5" />
+          <div style="margin-top:10px" class="controls">
+            <button id="k_update">Update K-Map</button>
+            <button id="k_clear">Clear</button>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="small muted">Result (from Quine–McCluskey):</div>
+            <pre id="k_result">—</pre>
+          </div>
+        </div>
+
+        <div>
+          <div class="small muted">Karnaugh Map (click cells to toggle)</div>
+          <div id="kmap_grid" style="margin-top:8px"></div>
+
+          <div style="margin-top:8px">
+            <div class="small muted">Prime implicants / Groups</div>
+            <pre id="k_primes">—</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="qm" class="card" style="display:none">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1">
+          <label>Number of variables (2–6)</label>
+          <select id="qm_vars">
+            <option>2</option>
+            <option>3</option>
+            <option>4</option>
+            <option selected>5</option>
+            <option>6</option>
+          </select>
+          <label style="margin-top:8px">Minterms (comma separated)</label>
+          <input id="qm_minterms" type="text" placeholder="e.g. 0,1,3,7,12"/>
+          <label class="small muted">Don't cares (optional)</label>
+          <input id="qm_dont" type="text" placeholder="e.g. 2,5" />
+          <div style="margin-top:8px" class="controls">
+            <button id="qm_run">Run Quine–McCluskey</button>
+            <button id="qm_clear">Clear</button>
+          </div>
+        </div>
+        <div style="width:520px">
+          <div class="small muted">Prime implicants</div>
+          <pre id="qm_primes">—</pre>
+          <div style="margin-top:8px">
+            <div class="small muted">Essential primes & minimized SOP</div>
+            <pre id="qm_result">—</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="qc" class="card" style="display:none">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1">
+          <label>Number of qubits (1–3)</label>
+          <select id="qc_qubits">
+            <option>1</option>
+            <option selected>2</option>
+            <option>3</option>
+          </select>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label>Gate</label>
+            <select id="qc_gate">
+              <option value="H">H</option>
+              <option value="X">X</option>
+              <option value="Y">Y</option>
+              <option value="Z">Z</option>
+              <option value="CX">CNOT (control,target)</option>
+              <option value="Measure">Measure</option>
+            </select>
+            <label>Target (for single-qubit)</label>
+            <select id="qc_target"></select>
+            <label>Control (for CX)</label>
+            <select id="qc_control"></select>
+            <button id="qc_add">Add Gate</button>
+            <button id="qc_clear">Clear Circuit</button>
+          </div>
+
+          <div style="margin-top:10px">
+            <button id="qc_sim">Simulate</button>
+            <button id="qc_measure">Measure (collapse)</button>
+          </div>
+
+          <div style="margin-top:10px">
+            <div class="small muted">State vector / probabilities</div>
+            <pre id="qc_state">—</pre>
+          </div>
+        </div>
+        <div style="width:520px">
+          <div class="small muted">Circuit diagram</div>
+          <div id="qc_circuit_area" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px" class="small muted">Tip: Save this file and open it locally for offline use.</div>
+  </div>
+
+<script>
+// Utilities --------------------------------------------------
+function parseList(str){
+  if(!str) return [];
+  return Array.from(new Set(str.split(',').map(s=>s.trim()).filter(s=>s!="").map(Number))).filter(n=>!Number.isNaN(n));
+}
+
+// Quine-McCluskey implementation (supports up to 16 variables in principle but UI limits)
+function toBin(n, width){ return n.toString(2).padStart(width,'0'); }
+function countOnes(s){return (s.match(/1/g)||[]).length}
+
+function combineTerms(a,b){
+  // a and b are strings with - as dont-care
+  let dif=0;let res='';
+  for(let i=0;i<a.length;i++){
+    if(a[i]!==b[i]){dif++;res+='-';}else res+=a[i];
+  }
+  return dif===1?res:null;
+}
+
+function quineMcCluskey(minterms, dontcares, numVars){
+  const terms = [...new Set([...minterms,...dontcares])].sort((x,y)=>x-y);
+  const groups = {};
+  for(const t of terms){
+    const b=toBin(t,numVars);
+    const k=countOnes(b);
+    groups[k]=groups[k]||[]; groups[k].push({bits:b,ids:[t].slice(),used:false});
+  }
+  let allCombined=[];
+  // iterative combining
+  let currentGroups=groups;
+  while(true){
+    const nextGroups={};
+    const usedThisRound=new Set();
+    const combinedMap={};
+    const keys=Object.keys(currentGroups).map(Number).sort((a,b)=>a-b);
+    let any=false;
+    for(let i=0;i<keys.length-1;i++){
+      const g1=currentGroups[keys[i]]||[];
+      const g2=currentGroups[keys[i+1]]||[];
+      for(const t1 of g1){
+        for(const t2 of g2){
+          const res=combineTerms(t1.bits,t2.bits);
+          if(res){
+            any=true;
+            t1.used=true; t2.used=true;
+            const ids=Array.from(new Set([...(t1.ids||[]),...(t2.ids||[])]));
+            const k=countOnes(res.replace(/-/g,'0'));
+            nextGroups[k]=nextGroups[k]||[];
+            // avoid duplicates
+            const key=res+"|"+ids.join(',');
+            if(!combinedMap[res]){
+              nextGroups[k].push({bits:res,ids:ids,used:false}); combinedMap[res]=true;
+            }
+          }
+        }
+      }
+    }
+    // collect unused from currentGroups as prime implicants
+    for(const k of Object.keys(currentGroups)){
+      for(const t of currentGroups[k]){
+        if(!t.used){ allCombined.push(t); }
+      }
+    }
+    if(!any) break;
+    currentGroups=nextGroups;
+  }
+  // allCombined now contains prime implicants, filter those that don't cover any minterm? they will have ids which include either minterms or dontcares; remove primes that only cover dontcares
+  const primes = allCombined.filter(p=>p.ids.some(id=>minterms.includes(id))).map(p=>({bits:p.bits,ids:p.ids}));
+
+  // build prime implicant chart
+  const chart = {};
+  for(const m of minterms) chart[m]=[];
+  primes.forEach((p,pi)=>{
+    for(const id of p.ids) if(minterms.includes(id)) chart[id].push(pi);
+  });
+
+  // find essential primes
+  const essentialSet=new Set();
+  for(const m of Object.keys(chart)){
+    const arr=chart[m];
+    if(arr.length===1) essentialSet.add(arr[0]);
+  }
+  const essential = Array.from(essentialSet).map(i=>primes[i]);
+
+  // cover remaining minterms
+  let covered = new Set();
+  essential.forEach(p=>p.ids.forEach(id=>{ if(minterms.includes(id)) covered.add(id)}));
+  const remaining = minterms.filter(m=>!covered.has(m));
+
+  // If none remain, done. Else use Petrick's method (brute force search among primes)
+  const remainingPrimesIdx = primes.map((p,i)=>i).filter(i=>!essentialSet.has(i));
+  let bestCover = null;
+  if(remaining.length>0){
+    // brute force subsets of remaining primes (mindful of size)
+    const maxSearch = Math.min(18, remainingPrimesIdx.length);
+    const N = remainingPrimesIdx.length;
+    // iterate masks up to 2^N (cap at 2^18 ~ 262k)
+    const limit = 1<<N;
+    for(let mask=1; mask<limit; mask++){
+      const chosen = [];
+      const coveredNow = new Set(covered);
+      for(let j=0;j<N;j++) if(mask&(1<<j)){
+        const idx = remainingPrimesIdx[j]; chosen.push(idx);
+        primes[idx].ids.forEach(id=>{ if(minterms.includes(id)) coveredNow.add(id)});
+      }
+      if(remaining.every(m=>coveredNow.has(m))){
+        // evaluate cost: number of terms then total literal count
+        const termsCount = chosen.length;
+        const literalCount = chosen.reduce((s,i)=>s + primes[i].bits.replace(/-/g,'').length,0);
+        const cand = {chosen,termsCount,literalCount};
+        if(!bestCover || cand.termsCount<bestCover.termsCount || (cand.termsCount===bestCover.termsCount && cand.literalCount<bestCover.literalCount)) bestCover=cand;
+      }
+    }
+  }
+
+  let solution = [];
+  essential.forEach(p=>solution.push(p));
+  if(bestCover) bestCover.chosen.forEach(i=>solution.push(primes[i]));
+
+  // produce readable expressions
+  function bitsToExpr(bits){
+    const letters = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
+    let out='';
+    for(let i=0;i<bits.length;i++){
+      if(bits[i]==='-') continue;
+      out += (bits[i]==='1') ? letters[i] : letters[i] + "'";
+    }
+    return out||'1';
+  }
+
+  const primeExprs = primes.map(p=>({bits:p.bits,expr:bitsToExpr(p.bits)}));
+  const solutionExprs = solution.map(p=>bitsToExpr(p.bits));
+
+  return {primes:primeExprs,solution:solutionExprs};
+}
+
+// Karnaugh map UI -------------------------------------------------
+function gray(n){ return n ^ (n>>1); }
+function generateKMap(numVars,minterms,dontcares){
+  const cells = [];
+  const n = numVars;
+  if(n<2 || n>4) return cells;
+  const rows = n<=2?1: (n===3?2:4);
+  const cols = n<=2? (n===2?2:2) : (n===3?4:4);
+  // mapping: for 4 vars: rows=2 bits, cols=2 bits with gray code. We'll index by combined index = rowBits<<colBits etc
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      let a,b;
+      if(n===2){
+        a=gray(c); b=0; // use c as combined
+        var index = c;
+      } else if(n===3){
+        // treat variables: A B C -> rows: A, cols: BC (gray)
+        a = r; b = gray(c); index = (a<<2) | b; // a is 1bit -> shift 2
+      } else { // 4 vars: rows AB (gray), cols CD (gray)
+        a = gray(r); b = gray(c); index = (a<<2)|b;
+      }
+      cells.push({r,c,index});
+    }
+  }
+  return cells;
+}
+
+function renderKMap(){
+  const n = Number(document.getElementById('k_vars').value);
+  const minterms = parseList(document.getElementById('k_minterms').value);
+  const donts = parseList(document.getElementById('k_dont').value);
+  const grid = document.getElementById('kmap_grid'); grid.innerHTML='';
+  const cells = generateKMap(n,minterms,donts);
+  const rows = n<=2?1:(n===3?2:4);
+  const cols = n<=2?(n===2?2:2):(n===3?4:4);
+  const wrapper = document.createElement('div'); wrapper.style.display='grid'; wrapper.style.gridTemplateColumns = `repeat(${cols},auto)`;
+  wrapper.className='kmap';
+  cells.forEach(cell=>{
+    const el = document.createElement('div'); el.className='kcell'; el.dataset.index = cell.index;
+    const val = minterms.includes(cell.index)?1:(donts.includes(cell.index)?'x':0);
+    el.innerHTML = `<div style="text-align:center"><div class="small">${cell.index}</div><div>${val}</div></div>`;
+    if(val===1) el.classList.add('on');
+    el.onclick = ()=>{
+      // toggle presence in minterms -> update input and rerun
+      const cur = parseList(document.getElementById('k_minterms').value);
+      const dc = parseList(document.getElementById('k_dont').value);
+      if(cur.includes(cell.index)){
+        document.getElementById('k_minterms').value = cur.filter(x=>x!==cell.index).join(',');
+      } else {
+        // remove from donts if present
+        document.getElementById('k_dont').value = dc.filter(x=>x!==cell.index).join(',');
+        document.getElementById('k_minterms').value = [...cur,cell.index].join(',');
+      }
+      renderKMap(); renderQMFromK();
+    };
+    wrapper.appendChild(el);
+  });
+  grid.appendChild(wrapper);
+}
+
+function renderQMFromK(){
+  const n = Number(document.getElementById('k_vars').value);
+  const minterms = parseList(document.getElementById('k_minterms').value);
+  const donts = parseList(document.getElementById('k_dont').value);
+  if(minterms.length===0){ document.getElementById('k_result').innerText='0'; document.getElementById('k_primes').innerText='—'; return; }
+  const out = quineMcCluskey(minterms,donts,n);
+  document.getElementById('k_result').innerText = out.solution.join(' + ') || '1';
+  document.getElementById('k_primes').innerText = out.primes.map(p=>p.expr).join('\n');
+}
+
+// QM UI bindings
+document.getElementById('k_update').addEventListener('click',()=>{ renderKMap(); renderQMFromK(); });
+document.getElementById('k_clear').addEventListener('click',()=>{ document.getElementById('k_minterms').value=''; document.getElementById('k_dont').value=''; renderKMap(); renderQMFromK(); });
+
+// QM tool
+document.getElementById('qm_run').addEventListener('click',()=>{
+  const n = Number(document.getElementById('qm_vars').value);
+  const minterms = parseList(document.getElementById('qm_minterms').value);
+  const donts = parseList(document.getElementById('qm_dont').value);
+  if(minterms.length===0){ document.getElementById('qm_result').innerText='No minterms provided.'; document.getElementById('qm_primes').innerText='—'; return; }
+  const out = quineMcCluskey(minterms,donts,n);
+  document.getElementById('qm_primes').innerText = out.primes.map(p=>`${p.bits} -> ${p.expr}`).join('\n');
+  document.getElementById('qm_result').innerText = out.solution.join(' + ') || '1';
+});
+document.getElementById('qm_clear').addEventListener('click',()=>{ document.getElementById('qm_minterms').value=''; document.getElementById('qm_dont').value=''; document.getElementById('qm_primes').innerText='—'; document.getElementById('qm_result').innerText='—'; });
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelectorAll('#kmap,#qm,#qc').forEach(s=>s.style.display='none');
+  document.getElementById(t.dataset.tab).style.display='block';
+}));
+
+// Initialize kmap
+renderKMap(); renderQMFromK();
+
+// ---------- Quantum circuit simulator (small) ------------
+// Complex helper
+function C(re,im=0){ return {re:re,im:im}; }
+function Cadd(a,b){ return {re:a.re+b.re,im:a.im+b.im}; }
+function Csub(a,b){ return {re:a.re-b.re,im:a.im-b.im}; }
+function Cmul(a,b){ return {re:a.re*b.re - a.im*b.im, im: a.re*b.im + a.im*b.re}; }
+function Cabs2(a){ return a.re*a.re + a.im*a.im; }
+function Cscale(a,s){ return {re:a.re*s,im:a.im*s}; }
+
+function kron(A,B){
+  const m=A.length, n=A[0].length; const p=B.length,q=B[0].length; const R=[];
+  for(let i=0;i<m*p;i++){ R[i]=[]; for(let j=0;j<n*q;j++){ const ai=A[Math.floor(i/p)][Math.floor(j/q)]; const bj=B[i%p][j%q]; R[i][j]=Cmul(ai,bj);} }
+  return R;
+}
+
+function eye(n){ const I=[]; for(let i=0;i<n;i++){ I[i]=[]; for(let j=0;j<n;j++) I[i][j]= (i===j?C(1,0):C(0,0)); } return I; }
+function matMul(A,B){ const m=A.length,n=A[0].length,p=B[0].length; const R=[]; for(let i=0;i<m;i++){ R[i]=[]; for(let j=0;j<p;j++){ let s=C(0,0); for(let k=0;k<n;k++) s=Cadd(s,Cmul(A[i][k],B[k][j])); R[i][j]=s; }} return R; }
+
+function vecApply(mat,vec){ const n=mat.length; const out=[]; for(let i=0;i<n;i++){ let s=C(0,0); for(let j=0;j<n;j++) s=Cadd(s,Cmul(mat[i][j],vec[j])); out.push(s); } return out; }
+
+// basic gates
+const GATES = {
+  H: [[C(1/Math.sqrt(2),0),C(1/Math.sqrt(2),0)],[C(1/Math.sqrt(2),0),C(-1/Math.sqrt(2),0)]],
+  X: [[C(0,0),C(1,0)],[C(1,0),C(0,0)]],
+  Y: [[C(0,0),C(0,-1)],[C(0,1),C(0,0)]],
+  Z: [[C(1,0),C(0,0)],[C(0,0),C(-1,0)]],
+  I: [[C(1,0),C(0,0)],[C(0,0),C(1,0)]]
+};
+
+function buildFullOperatorSingle(nQubits, gate, target){
+  let op = null;
+  for(let i=0;i<nQubits;i++){
+    const g = (i===target)?gate:GATES.I;
+    if(op===null) op = g; else op = kron(op,g);
+  }
+  return op;
+}
+
+function buildCNOT(nQubits, control, target){
+  const dim = 1<<nQubits; const M=[]; for(let i=0;i<dim;i++){ M[i]=[]; for(let j=0;j<dim;j++) M[i][j]=C(0,0); }
+  for(let i=0;i<dim;i++){
+    const controlBit = (i>>control)&1;
+    const targetBit = (i>>target)&1;
+    let j;
+    if(controlBit===1){ j = i ^ (1<<target); } else j=i;
+    M[j][i] = Cadd(M[j][i], C(1,0));
+  }
+  return M;
+}
+
+function initState(nQubits){ const dim=1<<nQubits; const v=[]; for(let i=0;i<dim;i++) v.push(C(0,0)); v[0]=C(1,0); return v; }
+
+// Circuit representation: array of columns, each column is array of gate objects {type,target,control}
+let circuit = [];
+let nQ=2;
+let state = initState(nQ);
+
+function rebuildTargets(){
+  const tSel = document.getElementById('qc_target'); const cSel = document.getElementById('qc_control');
+  tSel.innerHTML=''; cSel.innerHTML='';
+  for(let i=0;i<nQ;i++){ const o = document.createElement('option'); o.value=i; o.innerText=i; tSel.appendChild(o); cSel.appendChild(o.cloneNode(true)); }
+}
+
+function renderCircuit(){
+  const area = document.getElementById('qc_circuit_area'); area.innerHTML='';
+  const tbl = document.createElement('table'); tbl.className='circuit';
+  const cols = Math.max(1, circuit.length);
+  // header
+  const header = document.createElement('tr'); header.appendChild(document.createElement('th'));
+  for(let c=0;c<cols;c++){ const th=document.createElement('th'); th.innerText='col '+c; header.appendChild(th); }
+  tbl.appendChild(header);
+  for(let q=0;q<nQ;q++){
+    const row=document.createElement('tr'); const th=document.createElement('th'); th.innerText='q['+q+']'; row.appendChild(th);
+    for(let c=0;c<cols;c++){
+      const td=document.createElement('td');
+      const col = circuit[c]||[];
+      const gateHere = col.find(g=> (g.type==='CX' ? (g.control===q||g.target===q) : g.target===q));
+      if(gateHere){
+        if(gateHere.type==='CX'){
+          if(gateHere.control===q) td.innerHTML='<span class="gate">●</span>';
+          else if(gateHere.target===q) td.innerHTML='<span class="gate">⊕</span>';
+        } else if(gateHere.type==='Measure') td.innerHTML='<span class="gate">M</span>';
+        else td.innerHTML='<span class="gate">'+gateHere.type+'</span>';
+      } else td.innerHTML='';
+      row.appendChild(td);
+    }
+    tbl.appendChild(row);
+  }
+  area.appendChild(tbl);
+}
+
+function addGateToCircuit(g){
+  // append gate to the next column (simple model)
+  const colIdx = circuit.length; circuit[colIdx]=circuit[colIdx]||[]; circuit[colIdx].push(g);
+  renderCircuit();
+}
+
+// event handlers
+document.getElementById('qc_qubits').addEventListener('change',(e)=>{
+  nQ = Number(e.target.value); circuit=[]; state=initState(nQ); rebuildTargets(); renderCircuit(); document.getElementById('qc_state').innerText='—';
+});
+
+rebuildTargets(); renderCircuit();
+
+document.getElementById('qc_add').addEventListener('click',()=>{
+  const g = document.getElementById('qc_gate').value;
+  const target = Number(document.getElementById('qc_target').value||0);
+  const control = Number(document.getElementById('qc_control').value||0);
+  if(g==='CX'){
+    if(control===target){ alert('Control and target must differ'); return; }
+    addGateToCircuit({type:'CX',control, target});
+  } else if(g==='Measure'){
+    addGateToCircuit({type:'Measure',target});
+  } else {
+    addGateToCircuit({type:g,target});
+  }
+});
+
+document.getElementById('qc_clear').addEventListener('click',()=>{ circuit=[]; renderCircuit(); document.getElementById('qc_state').innerText='—'; state = initState(nQ); });
+
+function applyFullOperatorToState(op,vec){ return vecApply(op,vec); }
+
+function simulateCircuit(collapse=false){
+  state = initState(nQ);
+  let curState = state.slice();
+  for(let col of circuit){
+    // build operator for this column: start with identity
+    let op = null; // full operator matrix
+    // for CX, we support only one CX per column; for multiple gates in same column we compose sequentially
+    // We'll sequentially apply each gate in the column
+    for(const g of col){
+      if(g.type==='CX'){
+        const M = buildCNOT(nQ,g.control,g.target);
+        curState = vecApply(M,curState);
+      } else if(g.type==='Measure'){
+        if(collapse){
+          // measure qubit and collapse probabilistically (sample)
+          const probs = {};
+          for(let i=0;i<curState.length;i++){ const bit = (i>>g.target)&1; probs[bit]=(probs[bit]||0)+Cabs2(curState[i]); }
+          const r=Math.random(); const p0=probs[0]||0; const outcome = (r<p0)?0:1;
+          // collapse: zero amplitudes inconsistent with outcome
+          for(let i=0;i<curState.length;i++){ if(((i>>g.target)&1)!==outcome) curState[i]=C(0,0); }
+          // renormalize
+          const norm = Math.sqrt(curState.reduce((s,a)=>s+Cabs2(a),0)); if(norm>0) for(let i=0;i<curState.length;i++) curState[i]=Cscale(curState[i],1/norm);
+        }
+      } else {
+        // single-qubit gate
+        const gateMat = GATES[g.type];
+        const full = buildFullOperatorSingle(nQ, gateMat, g.target);
+        curState = vecApply(full,curState);
+      }
+    }
+  }
+  state = curState;
+  // display
+  const lines = [];
+  for(let i=0;i<state.length;i++){
+    const amp = state[i]; const prob = Cabs2(amp); lines.push(`${i.toString(2).padStart(nQ,'0')}: ${amp.re.toFixed(4)} + ${amp.im.toFixed(4)}i  |p=${prob.toFixed(4)}`);
+  }
+  document.getElementById('qc_state').innerText = lines.join('\n');
+}
+
+document.getElementById('qc_sim').addEventListener('click',()=>{ simulateCircuit(false); });
+document.getElementById('qc_measure').addEventListener('click',()=>{ simulateCircuit(true); });
+
+// wire up initial example
+(function(){ document.getElementById('qm_minterms').value='0,1,2,5,6,7'; document.getElementById('qm_vars').value='3'; document.getElementById('qm_run').click(); 
+  // sample quantum circuit
+  nQ=2; rebuildTargets(); addGateToCircuit({type:'H',target:0}); addGateToCircuit({type:'CX',control:0,target:1}); renderCircuit();
+})();
+
+</script>
+</body>
+</html>
